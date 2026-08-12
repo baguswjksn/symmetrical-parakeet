@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Edit - {{ draft.title }}{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <a href="{{ url_for('index') }}" class="btn">&larr; Semua Draf</a>
+  <a href="{{ url_for('export_epub', draft_id=draft.id) }}" class="btn primary">Unduh EPUB</a>
+</div>
+
+<div class="edit-grid">
+  <section class="panel">
+    <h2>Detail Buku</h2>
+    <form action="{{ url_for('update_meta', draft_id=draft.id) }}" method="post" class="stacked-form">
+      <label>Judul
+        <input type="text" name="title" value="{{ draft.title }}" required>
+      </label>
+      <label>Penulis
+        <input type="text" name="author" value="{{ draft.author }}">
+      </label>
+      <label>Kode Bahasa
+        <input type="text" name="language" value="{{ draft.language }}" placeholder="id">
+      </label>
+      <button type="submit" class="btn primary">Simpan Detail</button>
+    </form>
+
+    <h3>Cover</h3>
+    {% if draft.cover_filename %}
+      <img src="{{ url_for('static', filename='covers/' + draft.cover_filename) }}" class="cover-preview" alt="cover">
+    {% endif %}
+    <form action="{{ url_for('update_cover', draft_id=draft.id) }}" method="post" enctype="multipart/form-data" class="stacked-form">
+      <input type="file" name="cover" accept=".png,.jpg,.jpeg" required>
+      <button type="submit" class="btn">Unggah Cover</button>
+    </form>
+
+    <h3>Styling (CSS)</h3>
+    <form action="{{ url_for('update_css', draft_id=draft.id) }}" method="post" class="stacked-form">
+      <textarea name="css" rows="10">{{ draft.css }}</textarea>
+      <button type="submit" class="btn">Simpan Styling</button>
+    </form>
+  </section>
+
+  <section class="panel wide">
+    <div class="toolbar">
+      <h2>Halaman</h2>
+      <form action="{{ url_for('new_page', draft_id=draft.id) }}" method="post">
+        <button type="submit" class="btn primary">+ Tambah Halaman</button>
+      </form>
+    </div>
+
+    {% if pages %}
+    <div class="page-list">
+      {% for p in pages %}
+      <details class="page-item" {% if loop.first %}open{% endif %}>
+        <summary>{{ loop.index }}. {{ p.title }}</summary>
+        <div class="page-body">
+          <form action="{{ url_for('update_page', draft_id=draft.id, page_id=p.id) }}" method="post" class="stacked-form">
+            <label>Judul Halaman
+              <input type="text" name="title" value="{{ p.title }}" required>
+            </label>
+            <label>Konten (HTML)
+              <textarea name="content" rows="12">{{ p.content }}</textarea>
+            </label>
+            <button type="submit" class="btn primary">Simpan Halaman</button>
+          </form>
+          <div class="page-controls">
+            <form action="{{ url_for('move_page', draft_id=draft.id, page_id=p.id, direction='up') }}" method="post">
+              <button type="submit" class="btn small">&uarr; Naik</button>
+            </form>
+            <form action="{{ url_for('move_page', draft_id=draft.id, page_id=p.id, direction='down') }}" method="post">
+              <button type="submit" class="btn small">&darr; Turun</button>
+            </form>
+            <form action="{{ url_for('delete_page', draft_id=draft.id, page_id=p.id) }}" method="post"
+                  onsubmit="return confirm('Hapus halaman ini?');">
+              <button type="submit" class="btn small danger">Hapus</button>
+            </form>
+          </div>
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Belum ada halaman.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

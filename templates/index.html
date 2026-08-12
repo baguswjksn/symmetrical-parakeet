@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Daftar Draf{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h1>Draf EPUB</h1>
+  <form action="{{ url_for('new_draft') }}" method="post">
+    <button type="submit" class="btn primary">+ Draf Baru</button>
+  </form>
+</div>
+
+{% if drafts %}
+<div class="draft-grid">
+  {% for d in drafts %}
+  <div class="draft-card">
+    {% if d.cover_filename %}
+      <img src="{{ url_for('static', filename='covers/' + d.cover_filename) }}" class="draft-cover" alt="cover">
+    {% else %}
+      <div class="draft-cover placeholder">Tanpa Cover</div>
+    {% endif %}
+    <div class="draft-info">
+      <h3>{{ d.title }}</h3>
+      <p class="muted">{{ d.author or 'Tanpa penulis' }}</p>
+      <p class="muted small">Diubah: {{ d.updated_at[:19].replace('T', ' ') }}</p>
+    </div>
+    <div class="draft-actions">
+      <a href="{{ url_for('edit_draft', draft_id=d.id) }}" class="btn">Edit</a>
+      <a href="{{ url_for('export_epub', draft_id=d.id) }}" class="btn">Unduh EPUB</a>
+      <form action="{{ url_for('delete_draft', draft_id=d.id) }}" method="post"
+            onsubmit="return confirm('Hapus draf ini beserta semua halamannya?');">
+        <button type="submit" class="btn danger">Hapus</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">Belum ada draf. Buat draf baru untuk mulai.</p>
+{% endif %}
+{% endblock %}
