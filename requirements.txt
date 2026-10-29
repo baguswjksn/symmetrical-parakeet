@@ -1,2 +1,3 @@
 Flask
 ebooklib
+pymupdf>=1.26
