@@ -131,6 +131,55 @@ input[type=text], textarea {
   width: 100%;
 }
 textarea { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.82rem; }
+select, input[type=file] {
+  font-family: inherit;
+  padding: 0.45rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: #fff;
+  width: 100%;
+}
+.import-panel { margin-bottom: 2rem; }
+.import-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+.import-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #444;
+}
+.import-form label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+}
+.import-status { max-width: 640px; }
+.progress {
+  height: 10px;
+  background: #eee;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 1rem 0 0.5rem;
+}
+.progress-bar {
+  height: 100%;
+  background: #1a1a1a;
+  transition: width 0.3s;
+}
+.import-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.error { color: #b3261e; font-size: 0.9rem; }
 .cover-preview {
   max-width: 100%;
   border-radius: 4px;

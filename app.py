@@ -1,21 +1,29 @@
 import os
 import sqlite3
+import tempfile
+import threading
 import uuid
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, send_file, abort
+from flask import Flask, render_template, request, redirect, url_for, send_file, abort, jsonify
 from ebooklib import epub
+from pdf_import import convert_pdf, ConversionError
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'epub_drafts.db')
 COVER_DIR = os.path.join(BASE_DIR, 'static', 'covers')
 EXPORT_DIR = os.path.join(BASE_DIR, 'exports')
 ALLOWED_COVER_EXT = {'png', 'jpg', 'jpeg'}
+IMPORT_MODES = {'auto', 'text', 'ocr'}
+OCR_LANGS = {'ind': 'Indonesia', 'ind+eng': 'Indonesia + Inggris', 'eng': 'Inggris'}
 
 os.makedirs(COVER_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-change-me'
+
+import_jobs = {}
+import_lock = threading.Lock()  # PyMuPDF is not thread-safe: convert one PDF at a time
 
 DEFAULT_CSS = """body { font-family: serif; line-height: 1.6; margin: 1em; }
 h1, h2, h3 { font-family: sans-serif; }
@@ -75,7 +83,7 @@ def index():
     conn = get_db()
     drafts = conn.execute("SELECT * FROM drafts ORDER BY updated_at DESC").fetchall()
     conn.close()
-    return render_template('index.html', drafts=drafts)
+    return render_template('index.html', drafts=drafts, ocr_langs=OCR_LANGS)
 
 
 @app.route('/draft/new', methods=['POST'])
@@ -108,6 +116,116 @@ def delete_draft(draft_id):
     conn.commit()
     conn.close()
     return redirect(url_for('index'))
+
+
+# ---------- Import PDF ----------
+
+def save_imported_draft(book):
+    conn = get_db()
+    t = now()
+    cur = conn.execute(
+        "INSERT INTO drafts (title, author, language, css, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (book.title, book.author, book.language, DEFAULT_CSS, t, t)
+    )
+    draft_id = cur.lastrowid
+    if book.cover:
+        filename = f"cover_{draft_id}_{uuid.uuid4().hex[:8]}.jpg"
+        with open(os.path.join(COVER_DIR, filename), 'wb') as f:
+            f.write(book.cover)
+        conn.execute("UPDATE drafts SET cover_filename = ? WHERE id = ?", (filename, draft_id))
+    conn.executemany(
+        "INSERT INTO pages (draft_id, position, title, content) VALUES (?, ?, ?, ?)",
+        [(draft_id, i, title, content) for i, (title, content) in enumerate(book.chapters)]
+    )
+    conn.commit()
+    conn.close()
+    return draft_id
+
+
+def import_summary(book, mode):
+    summary = f"{book.pages} halaman dibaca"
+    if book.ocr_pages:
+        summary += f" ({book.ocr_pages} lewat OCR)"
+    summary += f", menjadi {len(book.chapters)} bab."
+    if book.empty_pages:
+        summary += f" {book.empty_pages} halaman tidak menghasilkan teks (gambar atau halaman kosong)."
+        if mode == 'text':
+            summary += " Jika itu halaman hasil scan, ulangi dengan metode Otomatis atau OCR."
+    return summary
+
+
+def run_import(job_id, pdf_path, mode, lang, use_cover):
+    job = import_jobs[job_id]
+
+    def progress(fraction, message):
+        if fraction is not None:
+            job['progress'] = round(fraction * 100)
+        job['message'] = message
+
+    if not import_lock.acquire(blocking=False):
+        job['message'] = 'Menunggu konversi lain selesai...'
+        import_lock.acquire()
+    try:
+        book = convert_pdf(pdf_path, mode=mode, lang=lang, cover=use_cover,
+                           title_hint=os.path.splitext(job['filename'])[0], progress=progress)
+        job['draft_id'] = save_imported_draft(book)
+        job['summary'] = import_summary(book, mode)
+        job['progress'], job['status'] = 100, 'done'
+    except ConversionError as e:
+        job['status'], job['error'] = 'error', str(e)
+    except Exception:
+        app.logger.exception('PDF import failed')
+        job['status'], job['error'] = 'error', 'Terjadi kesalahan saat mengonversi PDF ini.'
+    finally:
+        import_lock.release()
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
+
+@app.route('/import', methods=['POST'])
+def import_pdf():
+    file = request.files.get('pdf')
+    if not file or not file.filename.lower().endswith('.pdf'):
+        return redirect(url_for('index'))
+    mode = request.form.get('mode', 'auto')
+    lang = request.form.get('lang', 'ind')
+    fd, pdf_path = tempfile.mkstemp(suffix='.pdf')
+    os.close(fd)
+    file.save(pdf_path)
+    job_id = uuid.uuid4().hex
+    import_jobs[job_id] = {
+        'filename': os.path.basename(file.filename), 'status': 'running', 'progress': 0,
+        'message': 'Menyiapkan...', 'summary': '', 'error': '', 'draft_id': None,
+    }
+    threading.Thread(
+        target=run_import,
+        args=(job_id, pdf_path, mode if mode in IMPORT_MODES else 'auto',
+              lang if lang in OCR_LANGS else 'ind', bool(request.form.get('cover'))),
+        daemon=True
+    ).start()
+    return redirect(url_for('import_progress', job_id=job_id))
+
+
+@app.route('/import/<job_id>')
+def import_progress(job_id):
+    job = import_jobs.get(job_id)
+    if not job:
+        abort(404)
+    return render_template('import.html', job=job, job_id=job_id)
+
+
+@app.route('/import/<job_id>/status')
+def import_status(job_id):
+    job = import_jobs.get(job_id)
+    if not job:
+        abort(404)
+    data = dict(job)
+    if job['draft_id']:
+        data['edit_url'] = url_for('edit_draft', draft_id=job['draft_id'])
+        data['export_url'] = url_for('export_epub', draft_id=job['draft_id'])
+    return jsonify(data)
 
 
 # ---------- Edit draft ----------

@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Mengonversi {{ job.filename }}{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <a href="{{ url_for('index') }}" class="btn">&larr; Semua Draf</a>
+</div>
+
+<section class="panel import-status">
+  <h2>{{ job.filename }}</h2>
+  <div class="progress"><div class="progress-bar" id="bar" style="width: {{ job.progress }}%"></div></div>
+  <p id="message" class="muted">{{ job.message }}</p>
+  <div id="done" hidden>
+    <p id="summary"></p>
+    <div class="import-actions">
+      <a href="#" id="export-link" class="btn primary">Unduh EPUB</a>
+      <a href="#" id="edit-link" class="btn">Periksa &amp; Edit Draf</a>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var statusUrl = {{ url_for('import_status', job_id=job_id)|tojson }};
+  var bar = document.getElementById('bar');
+  var message = document.getElementById('message');
+
+  function poll() {
+    fetch(statusUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (job) {
+        bar.style.width = job.progress + '%';
+        message.textContent = job.message;
+        if (job.status === 'done') {
+          message.textContent = 'Selesai.';
+          document.getElementById('summary').textContent = job.summary;
+          document.getElementById('export-link').href = job.export_url;
+          document.getElementById('edit-link').href = job.edit_url;
+          document.getElementById('done').hidden = false;
+        } else if (job.status === 'error') {
+          message.textContent = job.error;
+          message.className = 'error';
+        } else {
+          setTimeout(poll, 1000);
+        }
+      })
+      .catch(function () { setTimeout(poll, 2000); });
+  }
+  poll();
+})();
+</script>
+{% endblock %}

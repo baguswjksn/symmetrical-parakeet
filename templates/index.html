@@ -8,6 +8,36 @@
   </form>
 </div>
 
+<section class="panel import-panel">
+  <h2>Impor dari PDF</h2>
+  <form action="{{ url_for('import_pdf') }}" method="post" enctype="multipart/form-data" class="import-form">
+    <label>File PDF
+      <input type="file" name="pdf" accept=".pdf,application/pdf" required>
+    </label>
+    <label>Metode
+      <select name="mode">
+        <option value="auto">Otomatis (disarankan)</option>
+        <option value="text">Ekstrak teks (PDF digital)</option>
+        <option value="ocr">OCR semua halaman (scan)</option>
+      </select>
+    </label>
+    <label>Bahasa OCR
+      <select name="lang">
+        {% for code, name in ocr_langs.items() %}
+        <option value="{{ code }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check">
+      <input type="checkbox" name="cover" checked> Halaman pertama jadi cover
+    </label>
+    <button type="submit" class="btn primary">Konversi ke Draf</button>
+  </form>
+  <p class="muted small">Otomatis mengambil teks bawaan PDF dan memakai OCR hanya untuk halaman hasil scan.
+    Hasil konversi menjadi draf yang bisa diperiksa dan diedit sebelum diunduh sebagai EPUB.
+    OCR pertama kali akan mengunduh data bahasa (1&ndash;4 MB).</p>
+</section>
+
 {% if drafts %}
 <div class="draft-grid">
   {% for d in drafts %}
